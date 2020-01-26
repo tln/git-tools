@@ -1,0 +1,54 @@
+#!/bin/bash
+# git-branch-update pattern
+#
+# Update (rebase or merge) branches that match a glob
+#
+base=$(git remote show origin | grep "HEAD branch" | tr -d ' ' | cut -d: -f2)
+git fetch --prune
+for branch in `git branch | grep $1 | cut -c3-`; do
+	git checkout $branch
+	if git status | grep -q 'upstream is gone'; then
+		echo git branch -D $branch
+		read -p "Continue (y/N)? "
+		if [ "$REPLY" == "y" ]; then
+			git checkout $base
+			git branch -D $branch
+			continue
+		fi
+	fi
+	git log --oneline -5 origin/$base..
+	echo git pull --rebase origin $base
+	read -p "Continue (y/N)? "
+	if [ "$REPLY" == "y" ]; then
+		if git pull --rebase origin $base; then
+			numchanges=$(git log --oneline origin/$base.. | wc -l)
+			if [ "$numchanges" -gt 0 ]; then
+				echo git push -f origin $branch
+				read -p "Continue (y/N)? "
+				if [ "$REPLY" == "y" ]; then
+					git push -f origin $branch
+				else
+				    echo "watevs"
+				fi
+			else
+			    echo git push origin :$branch
+				read -p "Continue (y/N)? "
+				if [ "$REPLY" == "y" ]; then
+					git push origin :$branch
+					git checkout $base
+					git branch -D $branch
+				fi
+			fi
+		else
+			git rebase --abort
+			echo "Branch is way old"
+			echo git push origin :$branch
+			read -p "Continue (y/N)? "
+			if [ "$REPLY" == "y" ]; then
+				git push origin :$branch
+				git checkout $base
+				git branch -D $branch
+			fi
+		fi
+	fi
+done
